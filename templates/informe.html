@@ -1,0 +1,15 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Informe</title>
+  </head>
+  <body>
+    <h1>Informe</h1>
+    {% for nombre, apellido, imagen_url in registros %}
+    <div>
+      <h2>{{ nombre }} {{ apellido }}</h2>
+      <img src="{{ imagen_url }}" alt="Image for {{ nombre }} {{ apellido }}" />
+    </div>
+    {% endfor %}
+  </body>
+</html>

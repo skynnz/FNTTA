@@ -1,13 +1,16 @@
-from flask import Flask, render_template, request, redirect, url_for, send_from_directory
+from flask import Flask, render_template, request, redirect, url_for, send_from_directory, session, flash
 import psycopg2
 import os
+from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
 from reportlab.lib.pagesizes import letter
 from reportlab.lib import colors
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Image, Paragraph, Spacer
 from reportlab.lib.styles import getSampleStyleSheet
 
-app = Flask(__name__)
+app = Flask(__name__, static_url_path='/static')
+
+app.secret_key = 'asdf'
 conn = psycopg2.connect(dbname='fntta', user='postgres', password='admin', host='localhost', port='5432')
 
 app.config['UPLOAD_FOLDER'] = 'C:\\Users\\coding\\Desktop\\image_test' # Carpeta donde se guardarán las imágenes
@@ -15,6 +18,10 @@ app.config['ALLOWED_EXTENSIONS'] = {'png', 'jpg', 'jpeg', 'gif'}  # Extensiones 
 
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in app.config['ALLOWED_EXTENSIONS']
+
+@app.route('/image_test/<filename>')
+def serve_image(filename):
+    return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
 
 @app.route('/')
 def index():
@@ -39,7 +46,7 @@ def agregar():
         filename = secure_filename(imagen.filename)
         filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
         imagen.save(filepath)
-        cursor.execute("INSERT INTO registros (nombre, apellido, ci, nro_socio, depart, locali, imagen) VALUES (%s, %s, %s, %s, %s, %s, %s)", (nombre, apellido, ci, nro_socio, depart, locali, filepath))
+        cursor.execute("INSERT INTO registros (nombre, apellido, ci, nro_socio, depart, locali, imagen) VALUES (%s, %s, %s, %s, %s, %s, %s)", (nombre, apellido, ci, nro_socio, depart, locali, filename))
         conn.commit()
     else:
         # Manejar el caso cuando no se proporciona un archivo de imagen válido
@@ -171,6 +178,60 @@ def generar_informe_carnes_pdf():
     # Construir el PDF
     doc.build(elements)
     return 'Informe de carnés PDF generado correctamente.'
+
+@app.route('/register', methods=['GET', 'POST'])
+def register():
+    if request.method == 'POST':
+        username = request.form['username']
+        password = request.form['password']
+        hashed_password = generate_password_hash(password)
+        
+        cursor = conn.cursor()
+        try:
+            cursor.execute("INSERT INTO users (username, pass) VALUES (%s, %s)", (username, hashed_password))
+            conn.commit()
+            flash('User created successfully')
+            return redirect(url_for('login'))
+        except psycopg2.IntegrityError:
+            conn.rollback()
+            flash('Username already exists')
+        finally:
+            cursor.close()
+    
+    return render_template('registro.html')
+
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    if request.method == 'POST':
+        username = request.form['username']
+        password = request.form['password']
+        
+        cursor = conn.cursor()
+        cursor.execute("SELECT id, username, pass FROM users WHERE username = %s", (username,))
+        user = cursor.fetchone()
+        cursor.close()
+        
+        if user and check_password_hash(user[2], password):
+            session['user_id'] = user[0]
+            session['username'] = user[1]
+            return redirect(url_for('index'))
+        else:
+            flash('Invalid username or password')
+    
+    return render_template('login.html')
+
+@app.route('/logout')
+def logout():
+    session.pop('user_id', None)
+    session.pop('username', None)
+    return redirect(url_for('login'))
+
+# Protect routes
+@app.before_request
+def require_login():
+    allowed_routes = ['login', 'register', 'serve_image', 'uploaded_file']
+    if request.endpoint not in allowed_routes and 'user_id' not in session:
+        return redirect(url_for('login'))
 
 if __name__ == '__main__':
     app.run(debug=True)

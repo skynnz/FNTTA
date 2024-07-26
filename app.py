@@ -23,6 +23,10 @@ def allowed_file(filename):
 def serve_image(filename):
     return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
 
+@app.route('/static/<path:filename>')
+def custom_static(filename):
+    return send_from_directory(app.static_folder, filename)
+
 @app.route('/')
 def index():
     cursor = conn.cursor()
@@ -108,7 +112,7 @@ def generar_informe():
 
     return render_template('informe.html', registros=updated_registros)
 
-@app.route('/generar_informe_carnes_pdf')
+@app.route('/informe')
 def generar_informe_carnes_pdf():
     cursor = conn.cursor()
     cursor.execute("SELECT nombre, apellido, ci, nro_socio, depart, locali, imagen FROM registros")
@@ -224,12 +228,13 @@ def login():
 def logout():
     session.pop('user_id', None)
     session.pop('username', None)
+    flash('Session cerrada.')
     return redirect(url_for('login'))
 
 # Protect routes
-@app.before_request
+#@app.before_request
 def require_login():
-    allowed_routes = ['login', 'register', 'serve_image', 'uploaded_file']
+    allowed_routes = ['login', 'register', 'serve_image', 'uploaded_file','custom_static']
     if request.endpoint not in allowed_routes and 'user_id' not in session:
         return redirect(url_for('login'))
 
